@@ -22,22 +22,28 @@
 #include<mongocxx/database.hpp>
 
 
+using bsoncxx::builder::basic::kvp;
+using bsoncxx::builder::basic::make_array;
+using bsoncxx::builder::basic::make_document;
+
 class mongodb
 {
 public:
 
     struct DataBaseConfigs
     {
-        std::string Server;
-        std::string username;
-        std::string pwd;
+        std::string Server = "";
+        std::string username = "";
+        std::string pwd = "";
         int tls = 1;
         std::string port = "27017";
     };
 
     mongodb();
 
-    //~mongodb();
+    ~mongodb();
+
+    std::string ConvertToDate(std::string value);
 
     int init(mongodb::DataBaseConfigs Configs);
 
@@ -58,11 +64,11 @@ public:
     std::vector<std::string> findDocuments(std::string DBName , std::string CollName);
     //std::vector<std::map<std::string , std::string>> findDocumentsMap(std::string DBName , std::string CollName);
 
-    void InsertDocument(std::string DBName , std::string CollName , std::string json_input);
+    int InsertDocument(std::string DBName , std::string CollName , std::string json_input);
 
     void DeleteAllDocuments(std::string DBName , std::string CollName);
 
-    void UpdateDocuments(std::string DBName , std::string CollName , std::string new_input);
+    bool UpdateDocuments(std::string DBName , std::string CollName , std::string new_input , std::string specifier);
 
     void PrintAllDocuments(std::string DBName , std::string CollName);
 
@@ -70,7 +76,9 @@ public:
 
     std::vector<std::map<std::string , std::string>> findDocumentsMap(std::string DBName , std::string CollName);
 
+
 private:
+    
     DataBaseConfigs conf;
 
     //std::unique_ptr<mongocxx::instance> instance_;
@@ -90,3 +98,4 @@ private:
 };
 
 #endif // MONGODB_H
+

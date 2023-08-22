@@ -109,6 +109,44 @@ std::string ConvertTypeValue(bsoncxx::document::element element){
 
 }
 
+std::string mongodb::ConvertToDate(std::string value){
+
+
+    // std::string date_string = value;
+    // std::string input_format = "%Y:%m:%d %H:%M:%S";
+    // std::string output_format = "%Y-%m-%dT%H:%M:%S";
+    // std::string timezone_offset = ".000+03:30";
+
+    // std::tm tm = {};
+    // std::istringstream iss(date_string);
+    // iss >> std::get_time(&tm, input_format.c_str());
+
+    // std::ostringstream oss;
+    // oss << std::put_time(&tm, output_format.c_str());
+
+    // std::string formatted_date = oss.str() + timezone_offset;
+    // std::cout << formatted_date << std::endl;
+
+    std::tm time;
+    std::istringstream ss(value);
+    ss >> std::get_time(&time , "%Y:%m:%d %H:%M:%S");
+
+    std::time_t t = std::time(nullptr);
+    std::tm* localTime = std::localtime(&t);
+    time.tm_isdst = localTime->tm_isdst;
+    time.tm_gmtoff = localTime->tm_gmtoff;
+    time.tm_zone = localTime->tm_zone;
+
+
+    std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(std::mktime(&time));
+    std::chrono::system_clock::time_point tp_utc = tp + std::chrono::hours(3) + std::chrono::minutes(30);
+    auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(tp_utc.time_since_epoch()).count();
+
+    std::string millisecondsString = std::to_string(milliseconds);
+
+    return ("{\"$date\":" + millisecondsString + "}");
+}
+
 static mongocxx::instance& mongocxx_instance() {
     static mongocxx::instance instance{};
     return instance;
@@ -126,20 +164,20 @@ mongodb::mongodb(){
 
 }
 
-/*mongodb::~mongodb(){
+mongodb::~mongodb(){
 
     //std::cout << "\033[1;32m" << "Mongodb instance has been closed" << "\033[0m" << std::endl;
     //delete conf;
-    //pool_private.reset();
+    pool_private.reset();
     //mongocxx::instance::~instance();
     //delete pool_private;
     //exit(EXIT_SUCCESS);
-    mongocxx_instance().~instance();
-}*/
+    //mongocxx_instance.~instance();
+}
 
 int mongodb::init(DataBaseConfigs Configs){
 
-    if (Configs.Server == "" || Configs.username == "" || Configs.pwd == ""){
+    if (Configs.Server == ""){
         std::cerr << "Authentication failed." << std::endl;
         return EXIT_FAILURE;
     }
@@ -169,6 +207,7 @@ int mongodb::init(DataBaseConfigs Configs){
     mongodb::isConnectionAlive();
 
     return 0;
+
 }
 
 
@@ -184,6 +223,8 @@ void mongodb::isConnectionAlive(){
         std::cerr << "MongoDB Connection ERROR: " << e.what() << std::endl;
         exit(EXIT_FAILURE);
     }
+
+    std::cout << "\033[1;32m" << "Mongodb connection is alive" << "\033[0m" << std::endl;
 }
 
 
@@ -383,7 +424,7 @@ std::vector<std::string> mongodb::findDocuments(std::string DBName , std::string
 }
 
 
-void mongodb::InsertDocument(std::string DBName, std::string CollName, std::string json_input){
+int mongodb::InsertDocument(std::string DBName, std::string CollName, std::string json_input){
 
     if (mongodb::isDBExisting(DBName) == true){
 
@@ -408,6 +449,8 @@ void mongodb::InsertDocument(std::string DBName, std::string CollName, std::stri
         std::cerr << DBName + " DataBase doesn't Exist!" << std::endl;
         exit(EXIT_FAILURE);
     }
+
+    return 0;
 }
 
 
@@ -462,11 +505,6 @@ void mongodb::PrintAllDocuments(std::string DBName , std::string CollName){
 
 
 void mongodb::QueryDirectlyInDB(std::string DBName, std::string Conditions){
-    //mongocxx::database db = entry_private->database(DBName);
-    //mongocxx::database db = (*entry_private)->database(DBName);
-    //mongocxx::client& client = **entry_private;
-    //mongocxx::database db = client.database(DBName);
-    //mongocxx::pool::entry entry = pool_private.acquire();
 
     mongocxx::pool::entry entry = pool_ref().acquire();
 
@@ -499,7 +537,7 @@ std::vector<std::map<std::string , std::string>> mongodb::findDocumentsMap(std::
 
                     mapping[key] = ConvertTypeValue(elem);
 
-                    std::cout << mapping[key] << std::endl;
+                    //std::cout << mapping[key] << std::endl;
                 }
 
                 result.push_back(mapping);
@@ -521,3 +559,44 @@ std::vector<std::map<std::string , std::string>> mongodb::findDocumentsMap(std::
         exit(EXIT_FAILURE);
     }
 }
+
+
+//argumant example : "ip:172.20.6.14" , "test:hi"
+bool mongodb::UpdateDocuments(std::string DBName , std::string CollName , std::string new_input , std::string specifier){
+
+    if (mongodb::isDBExisting(DBName) == true){
+
+        if (mongodb::isCollectionExisting(DBName , CollName) == true){
+
+            mongocxx::pool::entry entry = pool_ref().acquire();
+            mongocxx::database db = entry->database(DBName);
+            
+            size_t pos_specif = specifier.find(":");
+            size_t pos_new_input = new_input.find(":");
+
+            if (new_input.at(pos_new_input + 1) != '{')
+                db.collection(CollName).update_one(make_document(kvp(specifier.substr(0 , pos_specif) , specifier.substr(pos_specif + 1))) , make_document(kvp("$set" , make_document(kvp(new_input.substr(0 , pos_new_input) , new_input.substr(pos_new_input + 1))))));
+
+            else{
+                
+                bsoncxx::document::value bson_value = bsoncxx::from_json(new_input.substr(pos_new_input + 1));
+                db.collection(CollName).update_one(make_document(kvp(specifier.substr(0 , pos_specif) , specifier.substr(pos_specif + 1))) , make_document(kvp("$set" , make_document(kvp(new_input.substr(0 , pos_new_input) , bson_value.view())))));
+            }
+            
+            entry->reset();
+        }
+
+        else{
+            std::cerr << CollName + " Collection doesn't Exist!" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    else{
+        std::cerr << DBName + " DataBase doesn't Exist!" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    return true;
+}
+
