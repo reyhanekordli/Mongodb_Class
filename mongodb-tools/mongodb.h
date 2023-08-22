@@ -35,7 +35,7 @@ public:
         std::string Server = "";
         std::string username = "";
         std::string pwd = "";
-        int tls = 1;
+        int tls = 0;
         std::string port = "27017";
     };
 

@@ -129,7 +129,7 @@ std::string mongodb::ConvertToDate(std::string value){
 
     std::tm time;
     std::istringstream ss(value);
-    ss >> std::get_time(&time , "%Y:%m:%d %H:%M:%S");
+    ss >> std::get_time(&time , "%Y-%m-%d %H:%M:%S");
 
     std::time_t t = std::time(nullptr);
     std::tm* localTime = std::localtime(&t);
